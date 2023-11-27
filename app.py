@@ -1,10 +1,15 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import geopandas as gpd
+from streamlit_folium import folium_static
+import folium
+
 
 class VisualizadorDatos:
     def __init__(self, archivo):
         self.data = pd.read_csv(archivo, delimiter=";")
+        self.data_ubigeos = pd.read_csv('TB_UBIGEOS.csv')
         self.columnas_departamento = ['DEPARTAMENTO1']
         self.columnas_provincia = ['DEPARTAMENTO1', 'PROVINCIA1']
         self.columnas_distrito = ['DEPARTAMENTO1', 'PROVINCIA1', 'DISTRITO1']
@@ -31,6 +36,18 @@ class VisualizadorDatos:
 
     def mostrar_grafica(self, figura):
         st.plotly_chart(figura)
+    
+    def generar_mapa_ubigeos(self, gdf):
+        m = folium.Map(location=[-9.1900, -75.0152], zoom_start=5, control_scale=True)
+
+        for idx, row in gdf.iterrows():
+            folium.Marker(
+                location=[row['latitud'], row['longitud']],
+                popup=row['distrito'],
+                icon=folium.Icon(color='blue')
+            ).add_to(m)
+
+        return m
 
 def main():
     # Título de la aplicación Streamlit
@@ -68,6 +85,23 @@ def main():
     fig_departamento = visualizador.generar_grafica(conteo_departamento, "Conteo por Departamento")
     fig_provincia = visualizador.generar_grafica(conteo_provincia, "Conteo por Provincia")
     fig_distrito = visualizador.generar_grafica(conteo_distrito, "Conteo por Distrito")
+    
+    # Unir los datos de coordenadas con los datos de Ubigeos utilizando el código UBIGEO1
+    merged_data = pd.merge(visualizador.data, visualizador.data_ubigeos, how="left", left_on="UBIGEO1", right_on="ubigeo_inei")
+
+    # Filtrar solo las filas que tienen datos de Ubigeo y coordenadas
+    filtered_data = merged_data.dropna(subset=['latitud', 'longitud'])
+    
+    # Crear un GeoDataFrame con la información de Ubigeos
+    geometry = gpd.points_from_xy(filtered_data['longitud'], filtered_data['latitud'])
+    gdf = gpd.GeoDataFrame(filtered_data, geometry=geometry)
+
+    # Generar el mapa de Ubigeos
+    mapa_ubigeos = visualizador.generar_mapa_ubigeos(gdf)
+    
+    # Mostrar el mapa de Ubigeos en la aplicación Streamlit
+    st.markdown("## Mapa de Ubigeos")
+    folium_static(mapa_ubigeos)
 
     # Mostrar las gráficas en la aplicación Streamlit
     visualizador.mostrar_grafica(fig_anp_cate)
